@@ -1,0 +1,15 @@
+{
+  "functions": [
+    {
+      "name": "get_weather",
+      "description": "Gets the current weather (condition and temperature) for a given city.",
+      "parameters": {
+        "location": {
+          "type": "string",
+          "description": "The city name to look up weather for (e.g. tokyo, osaka, sapporo)",
+          "required": true
+        }
+      }
+    }
+  ]
+}
