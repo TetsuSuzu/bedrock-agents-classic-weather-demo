@@ -1,37 +1,37 @@
 # Bedrock Agents (Classic) Weather Demo
 
-A minimal, end-to-end example of creating an **Amazon Bedrock Agents (classic)**
-agent with a function-definition **action group** backed by a dummy Lambda
-"weather API". Built while learning [aws/agent-toolkit-for-aws](https://github.com/aws/agent-toolkit-for-aws)'s
-`amazon-bedrock` skill.
+**Amazon Bedrock Agents(クラシック)** で、ダミーの天気APIとして動作するLambdaを
+バックエンドに持つ function-definition 型の **Action Group** を使ったAgentを
+作成する、最小構成のエンドツーエンドのサンプルです。
+[aws/agent-toolkit-for-aws](https://github.com/aws/agent-toolkit-for-aws) の
+`amazon-bedrock` スキルを学習しながら構築しました。
 
-> **Note:** Bedrock Agents classic is in maintenance mode and closed to new
-> customers. For new agent workloads, use
+> **注意:** Bedrock Agents クラシックはメンテナンスモードに入っており、新規顧客には
+> 提供終了しています。新規のエージェントワークロードには
 > [Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/what-is-bedrock-agentcore.html)
-> instead. This repo is for learning/reference purposes on an account that
-> already has classic Agents access.
-> See the [maintenance mode announcement](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html).
+> を使用してください。このリポジトリは、すでにクラシックAgentsへのアクセス権を持つ
+> アカウントでの学習・参考目的のものです。
+> 詳細は[メンテナンスモードのアナウンス](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html)を参照してください。
 
-## What it does
+## できること
 
-The agent answers "What's the weather in Tokyo?" by calling a `get_weather`
-action, which invokes a Lambda function that returns canned demo weather
-data for Tokyo, Osaka, and Sapporo (in English or Japanese city names).
+「東京の天気を教えて」という質問に対して、Agentが `get_weather` アクションを
+呼び出します。このアクションはLambda関数を実行し、東京・大阪・札幌の
+ダミーの天気データ(英語・日本語どちらの都市名にも対応)を返します。
 
-## Prerequisites
+## 前提条件
 
-- AWS CLI v2, configured with credentials that have Bedrock Agents classic
-  access (it's closed to new customers — see note above)
-- Python 3.10+ with `boto3`
-- Model access enabled for the foundation model you choose, in your target
-  region(s)
+- AWS CLI v2(Bedrock Agentsクラシックへのアクセス権を持つ認証情報で設定済み。
+  上記の通り新規顧客には提供終了しています)
+- Python 3.10+ と `boto3`
+- 使用するリージョンで、選択した基盤モデルへのモデルアクセスが有効になっていること
 
-## Setup
+## セットアップ
 
-Replace `<ACCOUNT_ID>`, `<REGION>`, `<INFERENCE_PROFILE_ID>`, and `<MODEL_ID>`
-in the `iam/*.json` files with your own values before running these commands.
+以下のコマンドを実行する前に、`iam/*.json` 内の `<ACCOUNT_ID>`、`<REGION>`、
+`<INFERENCE_PROFILE_ID>`、`<MODEL_ID>` をご自身の値に置き換えてください。
 
-### 1. Lambda function
+### 1. Lambda関数
 
 ```bash
 zip -j lambda_function.zip lambda/lambda_function.py
@@ -52,7 +52,7 @@ aws lambda create-function \
   --zip-file fileb://lambda_function.zip
 ```
 
-### 2. Bedrock Agent IAM role
+### 2. Bedrock Agent用IAMロール
 
 ```bash
 aws iam create-role \
@@ -65,11 +65,11 @@ aws iam put-role-policy \
   --policy-document file://iam/agent-model-policy.json
 ```
 
-### 3. Create the agent
+### 3. Agentの作成
 
-Use an **inference profile ID** as the foundation model — most current
-Claude models on Bedrock don't support on-demand (base model ID)
-invocation. Find one with:
+基盤モデルには**推論プロファイルID**を使用してください — Bedrock上の最近の
+Claudeモデルの多くは、オンデマンド(ベースモデルID)での呼び出しに対応していません。
+以下で確認できます。
 
 ```bash
 aws bedrock list-inference-profiles --region <REGION>
@@ -83,7 +83,7 @@ aws bedrock-agent create-agent \
   --agent-resource-role-arn arn:aws:iam::<ACCOUNT_ID>:role/weather_demo_agent_bedrock_role
 ```
 
-### 4. Action group + Lambda permission
+### 4. Action Group + Lambda権限
 
 ```bash
 aws lambda add-permission \
@@ -102,11 +102,11 @@ aws bedrock-agent create-agent-action-group \
   --function-schema file://schema/function-schema.json
 ```
 
-### 5. Prepare + alias
+### 5. Prepare + Alias
 
 ```bash
 aws bedrock-agent prepare-agent --agent-id <AGENT_ID>
-# poll until agentStatus == PREPARED
+# agentStatus が PREPARED になるまでポーリング
 aws bedrock-agent get-agent --agent-id <AGENT_ID> --query agent.agentStatus
 
 aws bedrock-agent create-agent-alias \
@@ -114,40 +114,41 @@ aws bedrock-agent create-agent-alias \
   --agent-alias-name demo
 ```
 
-### 6. Test
+### 6. テスト
 
-The `InvokeAgent` API is streaming-only — the AWS CLI can't call it, so use
-the provided script:
+`InvokeAgent` APIはストリーミング専用のため、AWS CLIからは呼び出せません。
+同梱のスクリプトを使用してください。
 
 ```bash
 pip install boto3
 python scripts/test_agent.py --agent-id <AGENT_ID> --agent-alias-id <ALIAS_ID>
 ```
 
-## Gotchas learned building this
+## 構築中にハマったポイント
 
-- **`bedrock:GetInferenceProfile` and `bedrock:GetFoundationModel` are
-  required on the agent's IAM role**, in addition to `InvokeModel` /
-  `InvokeModelWithResponseStream`. Without them, `CreateAgent`/`UpdateAgent`
-  fails with `AccessDeniedException: Access denied while trying to
-  create/update an agent using InferenceProfile ...` even though the role
-  can already invoke the model.
-- **Base (on-demand) model IDs often don't work for newer Claude models.**
-  `InvokeAgent` fails with *"Invocation of model ID ... with on-demand
-  throughput isn't supported"*. Use a cross-region or geographic inference
-  profile ID instead (`aws bedrock list-inference-profiles`).
-- **Aliases pin to a specific agent version at creation time.** Changing the
-  agent's model/config and re-running `prepare-agent` updates `DRAFT`, but
-  an existing alias keeps pointing at its old version. Delete and recreate
-  the alias (or use `update-agent-alias` with explicit routing) to pick up
-  the new version.
-- **`prepare-agent` is mandatory after every config change** — skipped
-  agents silently keep serving stale behavior.
-- Lambda needs a resource-based policy allowing `bedrock.amazonaws.com` to
-  invoke it, scoped with `aws:SourceAccount` + `aws:SourceArn` (confused
-  deputy protection).
+- **Agentの IAM ロールには `bedrock:GetInferenceProfile` と
+  `bedrock:GetFoundationModel` の権限も必要です**(`InvokeModel` /
+  `InvokeModelWithResponseStream` に加えて)。これらがないと、ロールが
+  すでにモデルを呼び出せる状態であっても、`CreateAgent`/`UpdateAgent` が
+  `AccessDeniedException: Access denied while trying to create/update an
+  agent using InferenceProfile ...` で失敗します。
+- **ベース(オンデマンド)モデルIDは新しめのClaudeモデルでは動作しないことが
+  多いです。** `InvokeAgent` 実行時に *"Invocation of model ID ... with
+  on-demand throughput isn't supported"* というエラーになります。
+  クロスリージョンまたは地理的な推論プロファイルIDを使用してください
+  (`aws bedrock list-inference-profiles` で確認)。
+- **Aliasは作成した時点のAgentバージョンに固定されます。** Agentのモデルや
+  設定を変更して `prepare-agent` を再実行すると `DRAFT` は更新されますが、
+  既存のAliasは古いバージョンを指したままです。新しいバージョンを反映させるには
+  Aliasを削除・再作成するか(あるいは `update-agent-alias` で明示的に
+  ルーティングを指定)してください。
+- **設定変更のたびに `prepare-agent` の実行が必須です** — 実行を忘れると、
+  Agentは気づかないまま古い設定で動作し続けます。
+- Lambdaには `bedrock.amazonaws.com` からの呼び出しを許可するリソースベース
+  ポリシーが必要で、`aws:SourceAccount` + `aws:SourceArn` でスコープを
+  絞る必要があります(confused deputy対策)。
 
-## Cleanup
+## クリーンアップ
 
 ```bash
 aws bedrock-agent delete-agent --agent-id <AGENT_ID> --skip-resource-in-use-check
