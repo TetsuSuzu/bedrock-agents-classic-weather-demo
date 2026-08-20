@@ -39,6 +39,38 @@ flowchart LR
 新しく追加されるのは **Harness・Gateway・Shim Lambda** の3つで、Shimが既存Lambdaを
 ARN経由で呼び出す形になるため、天気データの実体(ダミーデータ)は1箇所のまま共有されます。
 
+## Shim Lambdaとは
+
+**Shim Lambda(`weather_actions_shim`)は、新規に作成する変換アダプター役のLambda関数です。**
+`aws lambda create-function` で手動作成するのではなく、`agentcore.json` にコード定義を
+書いておくことで、`agentcore deploy` 実行時にCloudFormation経由で自動的にビルド・デプロイされる、
+**AWS上に実体を持つ通常のLambdaリソース**です。
+
+**なぜ必要か。** Bedrock Agents(クラシック)のAction Group Lambdaと、AgentCore Gatewayとでは
+呼び出し時のイベント形式(JSON構造)が異なります。
+
+| | 元のLambdaが期待する形 | AgentCore Gatewayが実際に渡す形 |
+|---|---|---|
+| 呼び出し方 | Bedrock独自の封筒形式(`messageVersion`, `actionGroup`, `function`, `parameters`など) | ツールの引数がフラットな`event`、ツール名は`context.client_context.custom`内 |
+| 応答形式 | `response.functionResponse.responseBody.TEXT.body` のようなネスト構造 | プレーンなJSON |
+
+元のLambdaコードをそのままGatewayの背後に置いても、イベント形式が合わず動作しません。
+
+**Shimがやっていること。**
+
+```
+Gateway → Shim Lambda(新規) → 元のLambda(既存・無変更) → Shim Lambda → Gateway
+```
+
+1. Gateway形式のイベントを受け取る
+2. Bedrock Agents形式の封筒(`{"function": "get_weather", "parameters": [{"name": "location", "value": "tokyo", ...}]}`)に変換
+3. 元のLambda(`weather_demo_agent_get_weather`)をARN指定でそのまま呼び出す(コードはコピー・改変しない)
+4. 元のLambdaからのBedrock形式レスポンスを、Gatewayが期待するプレーンJSONに戻して返す
+
+**なぜ元のLambdaを直接編集しないか。** 元のLambdaを直接書き換えると応答の形が変わり、
+移行元のクラシックAgent(`weather_demo_agent`)側が壊れるリスクがあります。間に薄い変換層を
+挟むことで、元のAgentとLambdaを一切変更せずに残し、移行後も両方を並行稼働させられます。
+
 ## 移行元の構成(Phase 2 ディスカバリー)
 
 | 項目 | 内容 |
