@@ -7,6 +7,38 @@
 
 > 元のAgent自体は変更・削除しません。移行は新しいリソース一式を追加で作成するだけです。
 
+## アーキテクチャ図
+
+### 移行前:Bedrock Agents クラシック
+
+```mermaid
+flowchart LR
+    User["ユーザー\n(IAMユーザー)"] -->|InvokeAgent| Agent["Bedrock Agent\nweather_demo_agent\n(モデル: jp.anthropic.claude-haiku-4-5)"]
+    Agent -->|Action Group\nweather_actions| Lambda["Lambda\nweather_demo_agent_get_weather\n(ダミー天気API)"]
+    Lambda -->|weather data| Agent
+    Agent -->|回答| User
+```
+
+### 移行後:AgentCore Harness
+
+```mermaid
+flowchart LR
+    User["ユーザー\n(IAMユーザー)"] -->|SigV4 / AWS_IAM| Harness["AgentCore Harness\nweather_harness\n(モデル: jp.anthropic.claude-haiku-4-5)"]
+    Harness -->|awsIam outbound auth| Gateway["AgentCore Gateway\nweather_gateway"]
+    Gateway -->|invoke| Shim["Shim Lambda\nweather_actions_shim\n(新規・プロキシ)"]
+    Shim -->|lambda:InvokeFunction\nby ARN| Lambda["Lambda\nweather_demo_agent_get_weather\n(既存・無変更)"]
+    Lambda -->|weather data| Shim
+    Shim -->|MCP形式で結果を返却| Gateway
+    Gateway --> Harness
+    Harness -->|回答| User
+
+    Agent["Bedrock Agent\nweather_demo_agent\n(移行元・そのまま残存)"] -.->|同じLambdaを参照\n変更されていない| Lambda
+```
+
+移行後も元の `weather_demo_agent` と `weather_demo_agent_get_weather` Lambdaはそのまま残ります。
+新しく追加されるのは **Harness・Gateway・Shim Lambda** の3つで、Shimが既存Lambdaを
+ARN経由で呼び出す形になるため、天気データの実体(ダミーデータ)は1箇所のまま共有されます。
+
 ## 移行元の構成(Phase 2 ディスカバリー)
 
 | 項目 | 内容 |
